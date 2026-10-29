@@ -1,0 +1,4 @@
+import { requireSession } from "@/src/core/session";
+import { githubStatus } from "@/src/modules/github/service";
+import { GitHubConsole } from "@/components/github-console";
+export default async function GitHubPage() { const session = await requireSession(); const connections = githubStatus(session.user.id); const current = connections.find((item) => item.status === "connected"); return <main className="content"><header className="page-head"><div><p className="eyebrow">GitHub</p><h1>Authorized engineering workspace</h1><p className="subtitle">Repository reads and writes use official REST APIs. Every write requires an exact server-validated target and explicit confirmation.</p></div></header><GitHubConsole connected={Boolean(current)} login={current ? String(current.login) : undefined} /></main>; }

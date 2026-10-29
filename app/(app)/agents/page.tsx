@@ -1,0 +1,6 @@
+import { requireSession } from "@/src/core/session";
+import { ensureDefaultProject } from "@/src/modules/workspace/service";
+import { listAgents } from "@/src/modules/agents/service";
+import { listModels } from "@/src/modules/gateway/connections";
+import { AgentConsole } from "@/components/agent-console";
+export default async function AgentsPage() { const session = await requireSession(); const projectId = ensureDefaultProject(session.user.id); const agents = listAgents(session.user.id).map((item) => ({ id: String(item.id), name: String(item.name), role: String(item.role), instructions: String(item.instructions), isTemplate: Number(item.isTemplate), allowedTools: JSON.parse(String(item.allowedToolsJson)) as string[] })); const models = listModels(session.user.id).map((item) => ({ connectionId: String(item.connectionId), provider: String(item.provider), modelId: String(item.modelId), displayName: String(item.displayName) })); return <main className="content"><header className="page-head"><div><p className="eyebrow">Agent Teams</p><h1>Bounded specialists, shared state</h1><p className="subtitle">Each agent gets a persisted task, explicit model, limited execution, and inspectable output. The coordinator cannot create unlimited child work.</p></div></header><AgentConsole agents={agents} models={models} projectId={projectId} /></main>; }
