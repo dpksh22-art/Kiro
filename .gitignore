@@ -15,3 +15,10 @@ data/*artifacts/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Graphify machine-local incremental state; portable graph outputs are committed.
+graphify-out/.graphify_*
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/memory/
+graphify-out/reflections/

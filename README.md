@@ -4,6 +4,8 @@ NEXUS is a self-hosted, multi-model AI workspace with encrypted provider connect
 
 This repository contains a functioning single-node application. It does not include model API entitlements, paid search access, or a hosted production environment.
 
+![NEXUS AI OS Command Center](docs/images/nexus-ai-os-command-center.png)
+
 ## Implemented
 
 - Better Auth email/password sessions and protected application/API routes.
@@ -97,6 +99,27 @@ Open **Research Lab** and add up to ten complementary public webpage, RSS/Atom, 
 NEXUS is a modular monolith on Next.js 16 and Node.js 22. SQLite is the initial durable system of record for a personal single-node deployment. The provider gateway, task runtime, research connectors, and GitHub integration have owned interfaces and tables. GitHub write intents use payload-bound operation keys and reconcile exact remote identifiers before retry; provider calls retain the documented at-least-once boundary.
 
 See [Architecture](docs/ARCHITECTURE.md), [Costs and resource accounting](docs/COSTS.md), [Providers](docs/PROVIDERS.md), [Agents](docs/AGENTS.md), [GitHub workflows](docs/GITHUB.md), [Security](docs/SECURITY.md), [Deployment](docs/DEPLOYMENT.md), and [Testing](docs/TESTING.md).
+
+### Graphify code knowledge graph
+
+NEXUS includes a project-scoped [Graphify](https://github.com/Graphify-Labs/graphify) skill and a generated local code graph. Graphify converts the TypeScript application, SQL migrations, package metadata, and configuration into explicit nodes and relationships. Agents can query a small relevant subgraph instead of repeatedly scanning the whole repository, inspect paths between components, and distinguish extracted relationships from inferred ones. It uses deterministic tree-sitter parsing for the committed code graph and requires no model API key or vector database.
+
+The portable outputs are committed in `graphify-out/`:
+
+- `graph.html`: interactive browser visualization.
+- `GRAPH_REPORT.md`: architecture hubs, communities, cycles, and graph statistics.
+- `graph.json`: queryable graph data used by the project steering rule.
+
+Install the CLI with Python 3.10+ and `uv`, then update or query the graph from the repository root:
+
+```bash
+uv tool install "graphifyy[sql]"
+graphify kiro install          # refresh the project-scoped Kiro skill
+graphify update .              # update changed code without an API call
+graphify query "How does task cancellation reach delegated children?"
+```
+
+The current graph contains 1,166 nodes, 3,347 edges, and 58 communities. Machine-specific caches and interpreter paths remain ignored.
 
 ## Current limitations
 
