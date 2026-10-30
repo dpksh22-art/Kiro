@@ -41,7 +41,7 @@ Final observed results on 2026-10-30 in the Kiro Linux sandbox:
 - Standalone persistence smoke: passed with the latest schema and a retained marker across restart.
 - Operator backup/verify: authenticated version-2 fixture and CLI verification passed; wrong/missing signing keys and coordinated database+manifest+checksum tampering failed closed.
 - `npm audit` and `npm audit --omit=dev`: 0 known vulnerabilities.
-- Container build/restart: configured as a CI job with a named-volume marker check, but not observed locally because this sandbox has no working container runtime. Do not treat the CI configuration as a passing result until a workflow run completes.
+- Container build/restart: passed in GitHub Actions run `40995585894`. The job built the production image, audited the final installed production dependency tree, reached readiness, wrote a database marker, restarted on the same named volume, and recovered the marker. Local container execution remains unavailable because this sandbox lacks `conmon`.
 - Final independent semantic review: `semantic-review/2026-10-30-025950-pr-1.md` returned `APPROVED` with zero issues and no critical/high blockers.
 
 ## Credential-gated checks

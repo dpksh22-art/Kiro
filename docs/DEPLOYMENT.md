@@ -101,4 +101,4 @@ Temporal is a later option for long-lived cross-service workflows, not a current
 
 ## Deployment status
 
-The Docker and Compose configuration is implemented. CI now builds the image and is configured to prove health plus a database marker across a named-volume restart. The local sandbox has no working container runtime, so this report does not claim a locally observed container result. No external staging or production target was present, so no remote deployment occurred.
+The Docker and Compose configuration is implemented. GitHub Actions run `40995585894` built the production image, audited its installed dependency tree, reached readiness, and recovered a database marker after replacing the container on the same named volume. The local sandbox still has no working `conmon`, so local container execution remains unavailable. No external staging or production target was present, so no remote deployment occurred.

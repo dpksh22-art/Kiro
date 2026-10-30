@@ -28,7 +28,7 @@ This repository contains a functioning single-node application. It does not incl
 - Transactional monetary and non-monetary budget admission. Resource policies cover model calls, input/output tokens, broker calls, and task starts across owner, project, provider, run, and agent scopes. Unknown prices fail closed when a monetary limit applies.
 - Online SQLite backup bundles with coordinated artifact snapshots, HMAC-authenticated versioned manifests, and isolated restore verification. Bundles are not encrypted; operators remain responsible for encrypted storage.
 - Responsive dark/light workstation interface with honest empty, disconnected, running, failed, and cancelled states.
-- SQLite WAL single-writer deployment, migrations through `0010_security_reliability_boundaries.sql`, health checks, production-only runtime dependencies, Docker/Compose configuration, full-lockfile and final-image audit gates, CI, and automated tests.
+- SQLite WAL single-writer deployment, migrations through `0010_security_reliability_boundaries.sql`, health checks, production-only runtime dependencies, Docker/Compose configuration, full-lockfile and final-image audit gates, CI, and automated tests. GitHub Actions run `40995585894` verified the image, audit, readiness, and named-volume restart persistence.
 
 ## Quick start
 

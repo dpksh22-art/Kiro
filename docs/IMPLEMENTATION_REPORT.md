@@ -3,7 +3,7 @@
 Date: 2026-10-30
 Repository: `dpksh22-art/Kiro`
 Branch: `feat/nexus-completion`
-Release boundary: single-owner, single-node, self-hostable beta candidate; live-provider, remote-deployment, and observed-container release gates remain open
+Release boundary: single-owner, single-node, self-hostable release candidate; live-provider and remote-deployment gates remain open
 
 ## Built
 
@@ -48,11 +48,11 @@ Outside the application, the connected sandbox credential verified repository me
 - Next.js production build: passed; 39 static-generation work items completed.
 - Full lockfile audit and production-only audit: 0 known vulnerabilities.
 - Final independent semantic review: `semantic-review/2026-10-30-025950-pr-1.md` returned `APPROVED` with zero issues and no critical/high blockers.
-- Container image build/run: not locally available in this sandbox. CI builds the image, audits its installed production tree, and checks readiness plus named-volume restart persistence; the static runtime-packaging test passed locally.
+- Container image build/run: GitHub Actions run `40995585894` passed `verify`, `browser`, and `container`. The container job built the production image with native dependencies, audited its installed production tree, reached readiness, wrote a marker to a named volume, restarted the image, and recovered the marker. Local execution remains unavailable because this sandbox lacks `conmon`.
 
 ## Deployment
 
-No external development or staging target was available, so no remote deployment occurred. `Dockerfile`, `compose.yaml`, health checks, absolute production data path enforcement, non-root runtime, persistent volume, online backup creation, isolated restore verification, upgrade, and rollback guidance are included. Container restart evidence awaits an actual CI workflow run.
+No external development or staging target was available, so no remote deployment occurred. `Dockerfile`, `compose.yaml`, health checks, absolute production data path enforcement, non-root runtime, persistent volume, online backup creation, isolated restore verification, upgrade, and rollback guidance are included. GitHub Actions run `40995585894` verified the image build, final production dependency audit, readiness, and named-volume restart persistence.
 
 ## Configuration required
 
