@@ -16,7 +16,10 @@ describe("run deadline enforcement", () => {
     db.prepare(`INSERT INTO models (id,connection_id,provider_model_id,display_name,capabilities_json,availability,created_at,updated_at) VALUES (?,?,?,?,?,'available',?,?)`).run(randomUUID(), connectionId, modelId, "Deadline Model", '{"text":"supported"}', now, now);
     db.prepare("UPDATE provider_connections SET status='connected' WHERE id=?").run(connectionId);
     vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError")), { once: true });
+      const signal = init?.signal;
+      const abort = () => reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+      if (signal?.aborted) abort();
+      else signal?.addEventListener("abort", abort, { once: true });
     })));
     const agentId = String(listAgents(userId).find((agent) => String(agent.slug) === "general-assistant")!.id);
     const runId = createAgentRun({ userId, projectId, goal: "Respect the run deadline", mode: "team", agentIds: [agentId], targets: [{ connectionId, modelId }], deadlineSeconds: 0.05 });
