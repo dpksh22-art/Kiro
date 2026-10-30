@@ -1,4 +1,8 @@
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim AS native-deps
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM native-deps AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -12,7 +16,7 @@ RUN BETTER_AUTH_URL=http://localhost:3000 \
     NEXUS_ARTIFACT_ROOT=/tmp/nexus-build-artifacts \
     npm run build
 
-FROM node:22-bookworm-slim AS production-deps
+FROM native-deps AS production-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
