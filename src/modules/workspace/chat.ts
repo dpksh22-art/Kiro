@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "@/src/core/database";
 import { writeAudit } from "@/src/core/audit";
 import { getAdapter } from "@/src/modules/gateway/adapters";
-import { releaseUsage, reserveUsage, settleUsage } from "@/src/modules/gateway/budgets";
+import { dispatchUsage, releaseUsage, reserveUsage, settleUsage } from "@/src/modules/gateway/budgets";
 import { connectionCredentials, getConnection } from "@/src/modules/gateway/connections";
+import { boundedConversationHistory, trustedProjectMemoryContext } from "@/src/modules/workspace/context";
+import { beginOwnerOperation } from "@/src/modules/lifecycle/owner-runtime";
 
 export type ChatTarget = { connectionId: string; modelId: string };
 export type ChatInput = {
@@ -22,16 +24,16 @@ function targetForUser(userId: string, target: ChatTarget): TargetRecord {
   const row = getDb().prepare(`SELECT c.provider, c.label AS connectionLabel, m.display_name AS displayName,
     m.input_price_micros_per_million AS inputPrice, m.output_price_micros_per_million AS outputPrice, m.pricing_currency AS pricingCurrency
     FROM models m JOIN provider_connections c ON c.id=m.connection_id
-    WHERE c.user_id=? AND c.id=? AND m.provider_model_id=? AND m.availability='available'`)
+    WHERE c.user_id=? AND c.id=? AND c.status='connected' AND m.provider_model_id=? AND m.availability='available'`)
     .get(userId, target.connectionId, target.modelId) as Omit<TargetRecord, keyof ChatTarget> | undefined;
   if (!row) throw new Error(`Model ${target.modelId} is not available on this connection.`);
   return { ...target, ...row };
 }
 
-function estimateCost(target: TargetRecord, prompt: string, maxOutputTokens: number): number | undefined {
-  if (target.inputPrice === null || target.outputPrice === null) return undefined;
-  const estimatedInputTokens = Math.ceil(prompt.length / 4);
-  return Math.ceil((estimatedInputTokens * target.inputPrice + maxOutputTokens * target.outputPrice) / 1_000_000);
+function estimateUsage(target: TargetRecord, prompt: string, maxOutputTokens: number): { cost?: number; inputTokens: number } {
+  const inputTokens = Math.ceil(prompt.length / 4);
+  if (target.inputPrice === null || target.outputPrice === null) return { inputTokens };
+  return { inputTokens, cost: Math.ceil((inputTokens * target.inputPrice + maxOutputTokens * target.outputPrice) / 1_000_000) };
 }
 
 export function streamChat(input: ChatInput): ReadableStream<Uint8Array> {
@@ -39,6 +41,13 @@ export function streamChat(input: ChatInput): ReadableStream<Uint8Array> {
   const project = db.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").get(input.projectId, input.userId);
   if (!project) throw new Error("Project not found.");
   const targets = input.targets.map((target) => targetForUser(input.userId, target));
+  const memoryContext = trustedProjectMemoryContext(input.userId, input.projectId);
+  const history = boundedConversationHistory(input.userId, input.projectId, input.conversationId);
+  const providerMessages = [
+    ...(memoryContext ? [{ role: "system" as const, content: memoryContext }] : []),
+    ...history,
+    { role: "user" as const, content: input.prompt },
+  ];
   const now = new Date().toISOString();
   const conversationId = input.conversationId ?? randomUUID();
   const userMessageId = randomUUID();
@@ -56,20 +65,27 @@ export function streamChat(input: ChatInput): ReadableStream<Uint8Array> {
     db.prepare(`INSERT INTO messages (id, conversation_id, role, status, content, created_at, completed_at)
       VALUES (?, ?, 'user', 'completed', ?, ?, ?)`).run(userMessageId, conversationId, input.prompt, now, now);
     targets.forEach((target, index) => {
-      const estimated = estimateCost(target, input.prompt, maxOutputTokens);
+      const estimated = estimateUsage(target, providerMessages.map((message) => typeof message.content === "string" ? message.content : "").join("\n"), maxOutputTokens);
       db.prepare(`INSERT INTO messages
         (id, conversation_id, parent_message_id, role, connection_id, provider_model_id, status, content, estimated_cost_micros, created_at)
         VALUES (?, ?, ?, 'assistant', ?, ?, 'queued', '', ?, ?)`)
-        .run(answerIds[index], conversationId, userMessageId, target.connectionId, target.modelId, estimated ?? null, now);
-      reservationIds[index] = reserveUsage({ userId: input.userId, projectId: input.projectId, messageId: answerIds[index], provider: target.provider, modelId: target.modelId, estimatedCostMicros: estimated, currency: target.pricingCurrency ?? undefined });
+        .run(answerIds[index], conversationId, userMessageId, target.connectionId, target.modelId, estimated.cost ?? null, now);
+      reservationIds[index] = reserveUsage({
+        userId: input.userId, projectId: input.projectId, messageId: answerIds[index], provider: target.provider, modelId: target.modelId,
+        estimatedCostMicros: estimated.cost, currency: target.pricingCurrency ?? undefined,
+        estimatedInputTokens: estimated.inputTokens, maxOutputTokens,
+      });
     });
     db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(now, conversationId);
   })();
 
-  const encoder = new TextEncoder();
-  let closed = false;
   const abortController = new AbortController();
   input.requestSignal?.addEventListener("abort", () => abortController.abort(), { once: true });
+  let ownerOperation: ReturnType<typeof beginOwnerOperation>;
+  try { ownerOperation = beginOwnerOperation(input.userId, "chat", abortController); }
+  catch (error) { for (const id of reservationIds) releaseUsage(id); throw error; }
+  const encoder = new TextEncoder();
+  let closed = false;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -87,12 +103,13 @@ export function streamChat(input: ChatInput): ReadableStream<Uint8Array> {
         try {
           db.prepare("UPDATE messages SET status='streaming' WHERE id=?").run(answerId);
           send("answer.started", { answerId });
-          for await (const event of getAdapter(target.provider).stream({ modelId: target.modelId, messages: [{ role: "user", content: input.prompt }], maxOutputTokens, signal: abortController.signal }, connectionCredentials(connection))) {
+          for await (const event of getAdapter(target.provider).stream({ modelId: target.modelId, messages: providerMessages, maxOutputTokens, signal: abortController.signal, onDispatch: () => dispatchUsage(reservationIds[index]!) }, connectionCredentials(connection))) {
             if (event.type === "content.delta") {
               content += event.text;
               send("answer.delta", { answerId, text: event.text });
             } else if (event.type === "usage.updated" || event.type === "response.completed") {
               if (event.usage) finalUsage = { ...finalUsage, ...event.usage };
+              if (event.type === "response.completed") settleUsage(reservationIds[index]!, finalUsage ?? {});
             }
           }
           const completedAt = new Date().toISOString();
@@ -113,6 +130,7 @@ export function streamChat(input: ChatInput): ReadableStream<Uint8Array> {
       Promise.allSettled(targets.map(runTarget)).then(() => {
         writeAudit({ userId: input.userId, action: "chat.completed", resourceType: "conversation", resourceId: conversationId, outcome: abortController.signal.aborted ? "failure" : "success", metadata: { mode: input.mode, targetCount: targets.length } });
         send("chat.completed", { conversationId });
+        ownerOperation.end();
         closed = true;
         controller.close();
       });

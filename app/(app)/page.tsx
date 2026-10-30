@@ -16,7 +16,7 @@ export default async function CommandCenter() {
     <section className="grid grid-4" aria-label="Workspace metrics">
       <div className="card metric"><p className="metric-label">Active runs</p><p className="metric-value">{metrics.activeRuns}</p><p className="metric-note">Queued, running, or waiting</p></div>
       <div className="card metric"><p className="metric-label">Connected providers</p><p className="metric-value">{metrics.providers.connected}<span className="hint"> / {metrics.providers.total}</span></p><p className="metric-note">Validated connections only</p></div>
-      <div className="card metric"><p className="metric-label">Month usage</p><p className="metric-value">{metrics.monthCostMicros ? `$${(metrics.monthCostMicros / 1_000_000).toFixed(2)}` : "—"}</p><p className="metric-note">Provider-reported or verified estimates</p></div>
+      <div className="card metric"><p className="metric-label">Month settled cost</p><p className="metric-value">${(metrics.monthCostMicros / 1_000_000).toFixed(2)}</p><p className="metric-note">Provider-reported or final conservative estimate</p></div>
       <div className="card metric"><p className="metric-label">Failed runs</p><p className="metric-value">{metrics.failedRuns}</p><p className="metric-note">Inspectable and resumable where safe</p></div>
     </section>
     <section className="section grid grid-2">

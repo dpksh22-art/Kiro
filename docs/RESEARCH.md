@@ -35,7 +35,7 @@ Decision: database-backed control plane now, Temporal when NEXUS coordinates mul
 
 ## Research access
 
-Credential-free first sources are direct public HTTP, RSS/Atom, the [official Hacker News API](https://github.com/HackerNews/API), and public [GitHub REST APIs](https://docs.github.com/rest). [Tavily](https://docs.tavily.com/documentation/api-reference/introduction) is the optional first general-search provider. Reddit requires explicit approval and OAuth under its current data API policy. X requires approved developer access and paid API use. Anonymous scraping is not used as a fallback.
+Credential-free first sources are direct public HTTP, RSS/Atom, the [official Hacker News API](https://github.com/HackerNews/API), and public [GitHub REST APIs](https://docs.github.com/rest). [Tavily](https://docs.tavily.com/documentation/api-reference/introduction) is the optional first general-search provider. Reddit and X connectors are not implemented. Reddit requires explicit platform approval and OAuth under its current data API policy; X requires approved developer access and paid API use. Credentials alone do not establish either approval. Anonymous scraping is not used as a fallback.
 
 ## Frontend
 
@@ -61,6 +61,6 @@ GitHub issues and public discussions report upgrade churn, scaling edge cases, c
 4. Add artifact upload with MIME validation, malware scanning, quotas, and isolated extraction.
 5. Add a GitHub App installation/OAuth flow and webhook reconciliation.
 6. Migrate to PostgreSQL and separate workers before horizontal scale.
-7. Add evidence-aware model synthesis to research after citation validation tests.
+7. Evidence-aware model synthesis is implemented with local schema, citation, URL, and conservative excerpt-overlap validation; keep semantic entailment verification as a separate future decision.
 
 Content from linked sources was rephrased for compliance with licensing restrictions.

@@ -54,6 +54,6 @@ export function dashboard(userId: string) {
   const activeRuns = db.prepare("SELECT count(*) AS count FROM task_runs WHERE user_id=? AND status IN ('pending','running','waiting','paused','cancel_requested','cancelling')").get(userId) as { count: number };
   const blockedRuns = db.prepare("SELECT count(*) AS count FROM task_runs WHERE user_id=? AND status='failed'").get(userId) as { count: number };
   const connections = db.prepare("SELECT count(*) AS total, SUM(CASE WHEN status='connected' THEN 1 ELSE 0 END) AS connected FROM provider_connections WHERE user_id=?").get(userId) as { total: number; connected: number | null };
-  const usage = db.prepare("SELECT COALESCE(SUM(COALESCE(billed_cost_micros, estimated_cost_micros)),0) AS micros FROM usage_records WHERE user_id=? AND created_at>=?").get(userId, new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()) as { micros: number };
+  const usage = db.prepare("SELECT COALESCE(SUM(COALESCE(billed_cost_micros, estimated_cost_micros)),0) AS micros FROM usage_records WHERE user_id=? AND status='settled' AND created_at>=?").get(userId, new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()) as { micros: number };
   return { activeRuns: activeRuns.count, failedRuns: blockedRuns.count, providers: { total: connections.total, connected: connections.connected ?? 0 }, monthCostMicros: usage.micros };
 }

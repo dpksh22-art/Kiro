@@ -1,3 +1,4 @@
+import { boundedSignal } from "@/src/core/signals";
 import { load } from "cheerio";
 import { XMLParser } from "fast-xml-parser";
 import { safeFetch } from "@/src/modules/research/http";
@@ -16,8 +17,8 @@ function htmlText(html: string): { title?: string; text: string; canonical?: str
   return { title, text: normalizeSpace(root.text()).slice(0, 100_000), canonical };
 }
 
-export async function fetchWeb(url: string): Promise<ResearchItem[]> {
-  const { response, bytes, finalUrl } = await safeFetch(url);
+export async function fetchWeb(url: string, signal?: AbortSignal): Promise<ResearchItem[]> {
+  const { response, bytes, finalUrl } = await safeFetch(url, { signal });
   const mediaType = response.headers.get("content-type") ?? "";
   const raw = new TextDecoder().decode(bytes);
   if (mediaType.includes("json")) {
@@ -29,8 +30,8 @@ export async function fetchWeb(url: string): Promise<ResearchItem[]> {
   return [{ connector: "web", sourceType: "page", title: parsed.title, canonicalUrl, retrievedAt: new Date().toISOString(), text: parsed.text, metadata: { mediaType, finalUrl } }];
 }
 
-export async function fetchFeed(url: string): Promise<ResearchItem[]> {
-  const { bytes, finalUrl } = await safeFetch(url);
+export async function fetchFeed(url: string, signal?: AbortSignal): Promise<ResearchItem[]> {
+  const { bytes, finalUrl } = await safeFetch(url, { signal });
   const parsed = new XMLParser({ ignoreAttributes: false, processEntities: false, allowBooleanAttributes: true }).parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   const rssChannel = (parsed.rss as Record<string, unknown> | undefined)?.channel as Record<string, unknown> | undefined;
   const atomFeed = parsed.feed as Record<string, unknown> | undefined;
@@ -47,8 +48,8 @@ export async function fetchFeed(url: string): Promise<ResearchItem[]> {
   });
 }
 
-export async function fetchHackerNews(itemId: number): Promise<ResearchItem[]> {
-  const { bytes } = await safeFetch(`https://hacker-news.firebaseio.com/v0/item/${itemId}.json`);
+export async function fetchHackerNews(itemId: number, signal?: AbortSignal): Promise<ResearchItem[]> {
+  const { bytes } = await safeFetch(`https://hacker-news.firebaseio.com/v0/item/${itemId}.json`, { signal });
   const item = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   if (!item.id) throw new Error("Hacker News item not found.");
   return [{ connector: "hackernews", sourceType: "post", title: typeof item.title === "string" ? item.title : undefined,
@@ -57,10 +58,10 @@ export async function fetchHackerNews(itemId: number): Promise<ResearchItem[]> {
     retrievedAt: new Date().toISOString(), text: normalizeSpace(String(item.text ?? item.title ?? "")), metadata: { itemId, by: item.by, score: item.score, discussionUrl: `https://news.ycombinator.com/item?id=${itemId}` } }];
 }
 
-export async function fetchGitHub(repository: string): Promise<ResearchItem[]> {
+export async function fetchGitHub(repository: string, signal?: AbortSignal): Promise<ResearchItem[]> {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error("Repository must use owner/name format.");
   const token = process.env.GITHUB_TOKEN;
-  const { bytes } = await safeFetch(`https://api.github.com/repos/${repository}`, { headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+  const { bytes } = await safeFetch(`https://api.github.com/repos/${repository}`, { signal, headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
   const repo = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
   return [{ connector: "github", sourceType: "repository", title: String(repo.full_name ?? repository), canonicalUrl: String(repo.html_url ?? `https://github.com/${repository}`),
     publishedAt: typeof repo.updated_at === "string" ? repo.updated_at : undefined, retrievedAt: new Date().toISOString(),
@@ -68,23 +69,23 @@ export async function fetchGitHub(repository: string): Promise<ResearchItem[]> {
     metadata: { id: repo.id, stars: repo.stargazers_count, forks: repo.forks_count, openIssues: repo.open_issues_count, license: (repo.license as Record<string, unknown> | null)?.spdx_id } }];
 }
 
-export async function searchTavily(query: string): Promise<ResearchItem[]> {
+export async function searchTavily(query: string, signal?: AbortSignal): Promise<ResearchItem[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) throw new Error("TAVILY_API_KEY is not configured.");
-  const response = await fetch("https://api.tavily.com/search", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ query, search_depth: "basic", max_results: 5, include_answer: false, include_raw_content: false, safe_search: true }), signal: AbortSignal.timeout(20_000) });
+  const response = await fetch("https://api.tavily.com/search", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ query, search_depth: "basic", max_results: 5, include_answer: false, include_raw_content: false, safe_search: true }), signal: boundedSignal(20_000, signal) });
   if (!response.ok) throw new Error(`Tavily returned HTTP ${response.status}.`);
   const body = await response.json() as { results?: Array<{ url?: string }> };
   const urls = (body.results ?? []).flatMap((item) => item.url ? [item.url] : []).slice(0, 5);
-  const settled = await Promise.allSettled(urls.map(fetchWeb));
+  const settled = await Promise.allSettled(urls.map((url) => fetchWeb(url, signal)));
   return settled.flatMap((result) => result.status === "fulfilled" ? result.value.map((item) => ({ ...item, connector: "tavily" as const, metadata: { ...item.metadata, discoveredBy: "tavily", query } })) : []);
 }
 
-export async function executeConnector(input: ResearchSourceInput): Promise<ResearchItem[]> {
+export async function executeConnector(input: ResearchSourceInput, signal?: AbortSignal): Promise<ResearchItem[]> {
   switch (input.connector) {
-    case "web": return fetchWeb(input.url);
-    case "rss": return fetchFeed(input.url);
-    case "hackernews": return fetchHackerNews(input.itemId);
-    case "github": return fetchGitHub(input.repository);
-    case "tavily": return searchTavily(input.query);
+    case "web": return fetchWeb(input.url, signal);
+    case "rss": return fetchFeed(input.url, signal);
+    case "hackernews": return fetchHackerNews(input.itemId, signal);
+    case "github": return fetchGitHub(input.repository, signal);
+    case "tavily": return searchTavily(input.query, signal);
   }
 }

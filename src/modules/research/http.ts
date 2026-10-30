@@ -1,3 +1,4 @@
+import { boundedSignal } from "@/src/core/signals";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import ipaddr from "ipaddr.js";
@@ -67,7 +68,7 @@ export async function safeFetch(input: string, init: RequestInit = {}, redirects
       ...(init as Parameters<typeof pinnedFetch>[1]),
       dispatcher,
       redirect: "manual",
-      signal: init.signal ?? AbortSignal.timeout(15_000),
+      signal: boundedSignal(15_000, init.signal),
       headers: { "User-Agent": "NEXUS-AI-OS/0.1 research connector", Accept: "text/html,application/xhtml+xml,application/xml,application/json,text/plain", ...init.headers },
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {

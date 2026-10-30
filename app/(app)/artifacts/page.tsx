@@ -1,3 +1,9 @@
 import { requireSession } from "@/src/core/session";
-import { getDb } from "@/src/core/database";
-export default async function ArtifactsPage(){const session=await requireSession();const artifacts=getDb().prepare(`SELECT id,name,media_type AS mediaType,byte_size AS byteSize,content_hash AS contentHash,created_at AS createdAt FROM artifacts WHERE user_id=? ORDER BY created_at DESC`).all(session.user.id) as Array<Record<string,unknown>>;return <main className="content"><header className="page-head"><div><p className="eyebrow">Files & Artifacts</p><h1>Durable outputs and provenance</h1><p className="subtitle">Artifacts are content-addressed and scoped to their owner, project, and originating run.</p></div></header><div className="card list">{artifacts.length?artifacts.map((artifact)=><div className="list-row" key={String(artifact.id)}><span className="list-main"><span className="list-title">{String(artifact.name)}</span><span className="list-meta">{String(artifact.mediaType)} · {Number(artifact.byteSize).toLocaleString()} bytes</span></span><code>{String(artifact.contentHash).slice(0,12)}…</code></div>):<div className="empty"><strong>No stored artifacts</strong><span>Agent and research outputs appear here when exported as files.</span></div>}</div></main>}
+import { listArtifacts, MAX_ARTIFACT_BYTES } from "@/src/modules/artifacts/service";
+import { listProjects } from "@/src/modules/workspace/service";
+import { ArtifactManager } from "@/components/artifact-manager";
+
+export default async function ArtifactsPage() {
+  const session = await requireSession();
+  return <main className="content"><header className="page-head"><div><p className="eyebrow">Files & Artifacts</p><h1>Private content-addressed storage</h1><p className="subtitle">Uploads are streamed to local storage, identified by SHA-256, checked against quota, and downloadable only after the conservative scanner marks them clean.</p></div></header><ArtifactManager artifacts={listArtifacts(session.user.id)} projects={listProjects(session.user.id)} maxBytes={MAX_ARTIFACT_BYTES} /></main>;
+}

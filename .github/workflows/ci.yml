@@ -1,9 +1,9 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -20,7 +20,9 @@ jobs:
       BETTER_AUTH_URL: http://127.0.0.1:3100
       BETTER_AUTH_SECRET: ci-auth-secret-that-is-at-least-thirty-two-characters
       NEXUS_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      NEXUS_BACKUP_SIGNING_KEY: YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       NEXUS_DATABASE_PATH: /tmp/nexus-ci.db
+      NEXUS_ARTIFACT_ROOT: /tmp/nexus-ci-artifacts
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -28,12 +30,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm audit
       - run: npm audit --omit=dev
       - run: npm run db:migrate
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test -- tests/integration/backup-restore.test.ts
       - run: npm test
       - run: npm run build
+      - name: Verify operator backup bundle
+        run: |
+          mkdir -p /tmp/nexus-ci-backups
+          RESULT="$(npm run --silent backup -- /tmp/nexus-ci-backups)"
+          BUNDLE="$(node -e 'const r=JSON.parse(process.argv[1]); if(!r.ok) process.exit(1); process.stdout.write(r.bundleDir)' "$RESULT")"
+          npm run restore:verify -- "$BUNDLE"
 
   browser:
     runs-on: ubuntu-latest
@@ -45,7 +55,9 @@ jobs:
       BETTER_AUTH_URL: http://127.0.0.1:3200
       BETTER_AUTH_SECRET: ci-browser-secret-that-is-at-least-thirty-two-characters
       NEXUS_MASTER_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      NEXUS_BACKUP_SIGNING_KEY: YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       NEXUS_DATABASE_PATH: /tmp/nexus-browser.db
+      NEXUS_ARTIFACT_ROOT: /tmp/nexus-browser-artifacts
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -55,5 +67,48 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
+      - run: npm run test:persistence
       - run: npm run test:production
       - run: npm run test:e2e
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: verify
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build production container
+        run: docker build --tag nexus-ci:${{ github.sha }} .
+      - name: Audit final production dependency tree
+        run: |
+          docker run --rm nexus-ci:${{ github.sha }} npm ls --omit=dev
+          docker run --rm nexus-ci:${{ github.sha }} npm audit --omit=dev
+      - name: Boot, persist marker, and restart
+        run: |
+          docker volume create nexus-ci-data
+          docker run -d --name nexus-ci-first -p 3300:3000 -v nexus-ci-data:/app/data \
+            -e BETTER_AUTH_URL=http://127.0.0.1:3300 \
+            -e BETTER_AUTH_SECRET=ci-container-secret-that-is-at-least-thirty-two-characters \
+            -e NEXUS_MASTER_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+            -e NEXUS_BACKUP_SIGNING_KEY=YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+            nexus-ci:${{ github.sha }}
+          for attempt in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3300/api/health/ready >/dev/null && break; sleep 2; done
+          curl --fail --silent http://127.0.0.1:3300/api/health/ready >/dev/null
+          docker exec nexus-ci-first node -e "const D=require('better-sqlite3');const d=new D('/app/data/nexus.db');d.exec('CREATE TABLE IF NOT EXISTS persistence_smoke(value TEXT PRIMARY KEY)');d.prepare('INSERT OR IGNORE INTO persistence_smoke VALUES (?)').run('retained');d.close()"
+          docker rm -f nexus-ci-first
+          docker run -d --name nexus-ci-second -p 3300:3000 -v nexus-ci-data:/app/data \
+            -e BETTER_AUTH_URL=http://127.0.0.1:3300 \
+            -e BETTER_AUTH_SECRET=ci-container-secret-that-is-at-least-thirty-two-characters \
+            -e NEXUS_MASTER_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+            -e NEXUS_BACKUP_SIGNING_KEY=YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+            nexus-ci:${{ github.sha }}
+          for attempt in $(seq 1 60); do curl --fail --silent http://127.0.0.1:3300/api/health/ready >/dev/null && break; sleep 2; done
+          curl --fail --silent http://127.0.0.1:3300/api/health/ready >/dev/null
+          docker exec nexus-ci-second node -e "const D=require('better-sqlite3');const d=new D('/app/data/nexus.db',{readonly:true});const r=d.prepare('SELECT value FROM persistence_smoke').get();d.close();if(r?.value!=='retained')process.exit(1)"
+      - name: Clean container smoke resources
+        if: always()
+        run: |
+          docker rm -f nexus-ci-first nexus-ci-second 2>/dev/null || true
+          docker volume rm nexus-ci-data 2>/dev/null || true
