@@ -30,11 +30,12 @@ export class AnthropicAdapter implements ProviderAdapter {
       role: message.role === "assistant" ? "assistant" : "user",
       content: message.content,
     }));
+    const headers = this.headers(credentials);
     let response: Response;
     try {
       response = await fetch(`${BASE_URL}/v1/messages`, {
         method: "POST",
-        headers: this.headers(credentials),
+        headers,
         signal: request.signal,
         body: JSON.stringify({ model: request.modelId, messages, stream: true, max_tokens: request.maxOutputTokens ?? 2048, ...(system ? { system } : {}), ...(request.temperature !== undefined ? { temperature: request.temperature } : {}) }),
       });
@@ -45,34 +46,42 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (!response.ok) throw await providerError(response);
     let requestId = response.headers.get("request-id") ?? undefined;
     let usage: Usage | undefined;
+    let finishReason: string | undefined;
     let sawTerminal = false;
     yield { type: "response.started", providerRequestId: requestId };
-    for await (const item of parseSse(response)) {
-      const chunk = JSON.parse(item.data) as Record<string, unknown>;
-      if (item.event === "error" || chunk.type === "error") {
-        const detail = chunk.error as Record<string, unknown> | undefined;
-        throw new GatewayError("provider_error", typeof detail?.message === "string" ? detail.message : "Anthropic stream failed.");
-      }
-      if (item.event === "message_stop") sawTerminal = true;
-      if (item.event === "message_start") {
-        const message = chunk.message as Record<string, unknown> | undefined;
-        if (typeof message?.id === "string") requestId = message.id;
-        const raw = message?.usage as Record<string, unknown> | undefined;
-        if (raw) usage = { inputTokens: typeof raw.input_tokens === "number" ? raw.input_tokens : undefined };
-      }
-      if (item.event === "content_block_delta") {
-        const delta = chunk.delta as Record<string, unknown> | undefined;
-        if (delta?.type === "text_delta" && typeof delta.text === "string") yield { type: "content.delta", text: delta.text };
-      }
-      if (item.event === "message_delta") {
-        const raw = chunk.usage as Record<string, unknown> | undefined;
-        if (raw) {
-          usage = { ...usage, outputTokens: typeof raw.output_tokens === "number" ? raw.output_tokens : undefined };
-          yield { type: "usage.updated", usage };
+    try {
+      for await (const item of parseSse(response)) {
+        const chunk = JSON.parse(item.data) as Record<string, unknown>;
+        if (item.event === "error" || chunk.type === "error") {
+          const detail = chunk.error as Record<string, unknown> | undefined;
+          throw new GatewayError("provider_error", typeof detail?.message === "string" ? detail.message : "Anthropic stream failed.");
+        }
+        if (item.event === "message_stop") sawTerminal = true;
+        if (item.event === "message_start") {
+          const message = chunk.message as Record<string, unknown> | undefined;
+          if (typeof message?.id === "string") requestId = message.id;
+          const raw = message?.usage as Record<string, unknown> | undefined;
+          if (raw) usage = { inputTokens: typeof raw.input_tokens === "number" ? raw.input_tokens : undefined };
+        }
+        if (item.event === "content_block_delta") {
+          const delta = chunk.delta as Record<string, unknown> | undefined;
+          if (delta?.type === "text_delta" && typeof delta.text === "string") yield { type: "content.delta", text: delta.text };
+        }
+        if (item.event === "message_delta") {
+          const delta = chunk.delta as Record<string, unknown> | undefined;
+          if (typeof delta?.stop_reason === "string") finishReason = delta.stop_reason;
+          const raw = chunk.usage as Record<string, unknown> | undefined;
+          if (raw) {
+            usage = { ...usage, outputTokens: typeof raw.output_tokens === "number" ? raw.output_tokens : undefined };
+            yield { type: "usage.updated", usage };
+          }
         }
       }
+    } catch (error) {
+      if (request.signal?.aborted) throw new GatewayError("cancelled", "Request cancelled.", 499);
+      throw error;
     }
     if (!sawTerminal) throw new GatewayError("provider_error", "Anthropic stream ended without message_stop.", 502, true);
-    yield { type: "response.completed", usage, providerRequestId: requestId };
+    yield { type: "response.completed", finishReason, usage, providerRequestId: requestId };
   }
 }

@@ -14,6 +14,7 @@ describe("run deadline enforcement", () => {
     const connectionId = createConnection(userId, { provider: "openai", label: `Deadline ${randomUUID()}`, apiKey: "sk-test" });
     const modelId = `deadline-${randomUUID()}`;
     db.prepare(`INSERT INTO models (id,connection_id,provider_model_id,display_name,capabilities_json,availability,created_at,updated_at) VALUES (?,?,?,?,?,'available',?,?)`).run(randomUUID(), connectionId, modelId, "Deadline Model", '{"text":"supported"}', now, now);
+    db.prepare("UPDATE provider_connections SET status='connected' WHERE id=?").run(connectionId);
     vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError")), { once: true });
     })));

@@ -57,7 +57,7 @@ export function createAgentRun(input: {
   if (agents.some((agent) => !agent)) throw new Error("One or more agents were not found.");
   for (const target of input.targets) {
     const found = db.prepare(`SELECT 1 FROM models m JOIN provider_connections c ON c.id=m.connection_id
-      WHERE c.user_id=? AND c.id=? AND m.provider_model_id=? AND m.availability='available'`).get(input.userId, target.connectionId, target.modelId);
+      WHERE c.user_id=? AND c.id=? AND c.status='connected' AND m.provider_model_id=? AND m.availability='available'`).get(input.userId, target.connectionId, target.modelId);
     if (!found) throw new Error(`Model ${target.modelId} is not available.`);
   }
   const now = new Date().toISOString();

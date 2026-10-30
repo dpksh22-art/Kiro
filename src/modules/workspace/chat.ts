@@ -22,7 +22,7 @@ function targetForUser(userId: string, target: ChatTarget): TargetRecord {
   const row = getDb().prepare(`SELECT c.provider, c.label AS connectionLabel, m.display_name AS displayName,
     m.input_price_micros_per_million AS inputPrice, m.output_price_micros_per_million AS outputPrice, m.pricing_currency AS pricingCurrency
     FROM models m JOIN provider_connections c ON c.id=m.connection_id
-    WHERE c.user_id=? AND c.id=? AND m.provider_model_id=? AND m.availability='available'`)
+    WHERE c.user_id=? AND c.id=? AND c.status='connected' AND m.provider_model_id=? AND m.availability='available'`)
     .get(userId, target.connectionId, target.modelId) as Omit<TargetRecord, keyof ChatTarget> | undefined;
   if (!row) throw new Error(`Model ${target.modelId} is not available on this connection.`);
   return { ...target, ...row };

@@ -22,7 +22,7 @@ A complete Next.js application shell and versioned API with Better Auth, encrypt
 
 ## Providers
 
-Implemented adapters/profiles: OpenAI, Anthropic, Google Gemini, xAI, DeepSeek, Mistral, OpenRouter, and Ollama. No model-provider credentials were available, so none was live-tested. OpenAI-compatible behavior and failures were tested with controlled mock streams. Anthropic and Gemini native adapters compile but still require live conformance promotion before production use.
+Implemented adapters/profiles: OpenAI, Anthropic, Google Gemini, xAI, DeepSeek, Mistral, OpenRouter, and Ollama. No model-provider credentials were available, so none was live-tested. OpenAI-compatible, Anthropic, and Gemini behavior and failures were tested with controlled mock streams. Anthropic and Gemini still require live conformance promotion before production use.
 
 ## Multi-agent execution
 
@@ -41,7 +41,7 @@ Outside the application, the connected sandbox credential verified repository me
 - Clean migrations: passed, including Better Auth and two NEXUS migrations.
 - ESLint: passed.
 - TypeScript: passed.
-- Unit/integration: 28 assertions passed in 9 files.
+- Unit/integration: 40 tests passed in 12 files.
 - Chromium E2E: 3 passed.
 - Standalone production smoke: 1 passed.
 - Next.js production build: passed, 32 routes.

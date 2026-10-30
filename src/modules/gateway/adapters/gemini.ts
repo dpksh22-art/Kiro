@@ -40,11 +40,12 @@ export class GeminiAdapter implements ProviderAdapter {
       parts: [{ text: message.content }],
     }));
     const endpoint = `${BASE_URL}/models/${encodeURIComponent(request.modelId)}:streamGenerateContent?alt=sse`;
+    const apiKey = this.key(credentials);
     let response: Response;
     try {
       response = await fetch(endpoint, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": this.key(credentials) },
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
         signal: request.signal,
         body: JSON.stringify({
           contents,
@@ -59,21 +60,30 @@ export class GeminiAdapter implements ProviderAdapter {
     if (!response.ok) throw await providerError(response);
     yield { type: "response.started" };
     let usage: Usage | undefined;
-    let sawTerminal = false;
-    for await (const item of parseSse(response)) {
-      const chunk = JSON.parse(item.data) as Record<string, unknown>;
-      const candidates = chunk.candidates as Array<Record<string, unknown>> | undefined;
-      if (typeof candidates?.[0]?.finishReason === "string") sawTerminal = true;
-      const content = candidates?.[0]?.content as Record<string, unknown> | undefined;
-      const parts = content?.parts as Array<Record<string, unknown>> | undefined;
-      for (const part of parts ?? []) if (typeof part.text === "string") yield { type: "content.delta", text: part.text };
-      const raw = chunk.usageMetadata as Record<string, unknown> | undefined;
-      if (raw) {
-        usage = { inputTokens: typeof raw.promptTokenCount === "number" ? raw.promptTokenCount : undefined, outputTokens: typeof raw.candidatesTokenCount === "number" ? raw.candidatesTokenCount : undefined };
-        yield { type: "usage.updated", usage };
+    let finishReason: string | undefined;
+    try {
+      for await (const item of parseSse(response)) {
+        const chunk = JSON.parse(item.data) as Record<string, unknown>;
+        if (chunk.error) {
+          const detail = chunk.error as Record<string, unknown>;
+          throw new GatewayError("provider_error", typeof detail.message === "string" ? detail.message : "Gemini stream failed.");
+        }
+        const candidates = chunk.candidates as Array<Record<string, unknown>> | undefined;
+        if (typeof candidates?.[0]?.finishReason === "string") finishReason = candidates[0].finishReason;
+        const content = candidates?.[0]?.content as Record<string, unknown> | undefined;
+        const parts = content?.parts as Array<Record<string, unknown>> | undefined;
+        for (const part of parts ?? []) if (typeof part.text === "string") yield { type: "content.delta", text: part.text };
+        const raw = chunk.usageMetadata as Record<string, unknown> | undefined;
+        if (raw) {
+          usage = { inputTokens: typeof raw.promptTokenCount === "number" ? raw.promptTokenCount : undefined, outputTokens: typeof raw.candidatesTokenCount === "number" ? raw.candidatesTokenCount : undefined };
+          yield { type: "usage.updated", usage };
+        }
       }
+    } catch (error) {
+      if (request.signal?.aborted) throw new GatewayError("cancelled", "Request cancelled.", 499);
+      throw error;
     }
-    if (!sawTerminal) throw new GatewayError("provider_error", "Gemini stream ended without a finish reason.", 502, true);
-    yield { type: "response.completed", usage };
+    if (!finishReason) throw new GatewayError("provider_error", "Gemini stream ended without a finish reason.", 502, true);
+    yield { type: "response.completed", finishReason, usage };
   }
 }

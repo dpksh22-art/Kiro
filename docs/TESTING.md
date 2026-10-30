@@ -31,7 +31,7 @@ Final observed results on 2026-10-29 in the Kiro Linux sandbox:
 - Clean migration: passed; Better Auth schema plus `0001_core.sql` and `0002_security_and_usage.sql` applied.
 - ESLint: passed with no warnings.
 - Strict TypeScript: passed.
-- Unit/integration: 28 assertions passed across 9 files. This includes concurrent agent execution, dependency synthesis, atomic usage settlement, global budgets across providers, deadline abort, cancelled-lease recovery, credential encryption, stream errors/truncation, and 15 SSRF cases.
+- Unit/integration: 40 tests passed across 12 files. This includes Anthropic and Gemini mock contracts for discovery, text streaming, usage, terminal markers, in-band errors/truncation, authentication, and cancellation; connection snapshot reconciliation and connected-model selection; concurrent agent execution, dependency synthesis, atomic usage settlement, global budgets across providers, deadline abort, cancelled-lease recovery, credential encryption, and 15 SSRF cases.
 - Production build: passed; 32 application/API routes compiled.
 - Playwright browser suite: 3 passed. Owner bootstrap, protected pages/API, command center, and a live constrained fetch of `https://example.com/` with citation provenance were observed.
 - Standalone production smoke: 1 passed. `start:production` migrated a clean database, started `.next/standalone/server.js`, returned readiness with migration `0002`, writable storage, and working encryption, and redirected an unauthenticated user to login.
@@ -41,7 +41,7 @@ Final observed results on 2026-10-29 in the Kiro Linux sandbox:
 
 ## Credential-gated checks
 
-No model-provider API credential was present. OpenAI-compatible, Anthropic, and Gemini calls were contract-tested with mocks, but no live inference result is claimed. To promote a provider:
+No model-provider API credential was present. OpenAI-compatible, Anthropic, and Gemini adapters were contract-tested with controlled mock HTTP responses, including native Anthropic/Gemini discovery and stream behavior, but no live inference result is claimed. To promote a provider:
 
 1. Connect a valid credential in an isolated test project.
 2. Validate model discovery.

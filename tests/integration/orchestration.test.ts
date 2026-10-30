@@ -16,6 +16,7 @@ beforeAll(() => {
   const db = getDb(); userId = getTestUser(); const now = new Date().toISOString();
   projectId = createProject(userId, "Test project"); connectionId = createConnection(userId, { provider: "openai", label: "Mock provider", apiKey: "sk-test" }); modelId = "mock-model";
   db.prepare(`INSERT INTO models (id,connection_id,provider_model_id,display_name,capabilities_json,availability,created_at,updated_at) VALUES (?,?,?,?,?,'available',?,?)`).run(randomUUID(), connectionId, modelId, "Mock Model", '{"text":"supported","streaming":"supported"}', now, now);
+  db.prepare("UPDATE provider_connections SET status='connected' WHERE id=?").run(connectionId);
 });
 
 describe("durable multi-agent orchestration", () => {

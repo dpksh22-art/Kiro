@@ -53,6 +53,7 @@ export async function validateConnection(userId: string, id: string): Promise<nu
     const models = await getAdapter(row.provider).listModels(connectionCredentials(row), AbortSignal.timeout(15_000));
     const db = getDb();
     db.transaction(() => {
+      db.prepare("UPDATE models SET availability='unavailable', updated_at=? WHERE connection_id=?").run(checkedAt, id);
       const upsert = db.prepare(`INSERT INTO models
         (id, connection_id, provider_model_id, display_name, capabilities_json, availability, metadata_source, metadata_observed_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 'available', 'provider_api', ?, ?, ?)
@@ -65,7 +66,11 @@ export async function validateConnection(userId: string, id: string): Promise<nu
     return models.length;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Validation failed.";
-    getDb().prepare("UPDATE provider_connections SET status='invalid', last_checked_at=?, last_error=?, updated_at=? WHERE id=? AND user_id=?").run(checkedAt, message, checkedAt, id, userId);
+    const db = getDb();
+    db.transaction(() => {
+      db.prepare("UPDATE models SET availability='unavailable', updated_at=? WHERE connection_id=?").run(checkedAt, id);
+      db.prepare("UPDATE provider_connections SET status='invalid', last_checked_at=?, last_error=?, updated_at=? WHERE id=? AND user_id=?").run(checkedAt, message, checkedAt, id, userId);
+    })();
     writeAudit({ userId, action: "provider.connection.validated", resourceType: "provider_connection", resourceId: id, outcome: "failure", metadata: { provider: row.provider, error: message } });
     throw error;
   }
