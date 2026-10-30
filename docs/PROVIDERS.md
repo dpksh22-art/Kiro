@@ -1,45 +1,23 @@
 # Model providers
 
-Verified against official documentation on 2026-10-29. A provider-level API feature does not prove that every model supports it. NEXUS keeps model-level status unknown until discovery metadata or a controlled probe supports a claim.
+No provider credential was available for this increment. All claims below come from controlled adapter tests, not live conformance.
 
-| Provider | Adapter | Authentication | Live-tested here | Notes |
+| Provider | Adapter surface | Tool mapping | Structured output | Image URL input |
 |---|---|---|---|---|
-| OpenAI | OpenAI-compatible Chat Completions | API key | No | Streaming and usage normalized. Responses API and native multimodal inputs are future work. |
-| Anthropic | Native Messages | API key | No | Native system message, SSE blocks, token usage, and required `message_stop` handled. |
-| Google Gemini | Native GenerateContent | API key | No | Native model discovery and SSE generation; finish reason required. |
-| xAI | OpenAI-compatible profile | API key | No | Advanced Responses features are outside the current profile. |
-| DeepSeek | OpenAI-compatible profile | API key | No | Provider-specific reasoning and Responses semantics are outside the current profile. |
-| Mistral | OpenAI-compatible profile | API key | No | Native agents and preview Responses features are outside the current profile. |
-| OpenRouter | OpenAI-compatible profile | API key | No | Route capabilities and pricing remain provider metadata, not assumptions. |
-| Ollama | OpenAI-compatible local profile | None locally | No | Server operator controls `OLLAMA_BASE_URL`; browser users cannot point research or inference at arbitrary private hosts. |
+| OpenAI, xAI, DeepSeek, Mistral, OpenRouter, Ollama | OpenAI-compatible Chat Completions | `tools`, `tool_choice`, assistant `tool_calls`, tool-result messages, partial argument normalization | Strict `response_format.json_schema`; JSON object mode | Mapped by the contract, but application flows do not expose arbitrary URLs |
+| Anthropic | Native Messages | `tool_use`/`tool_result` blocks, native choice, partial `input_json_delta` normalization | Native JSON Schema output configuration; JSON-object-only requests are rejected | Native URL image blocks; application flows remain gated |
+| Google Gemini | Native GenerateContent | Function declarations, function calls/responses, native function-calling configuration | `responseMimeType` and `responseJsonSchema` | Rejected by this adapter because generic HTTPS URLs are not the native file surface |
+
+## Canonical contract
+
+Messages remain backward compatible with string content and may also contain discriminated text, image URL, artifact reference, tool call, and tool result parts. Unresolved artifact references are rejected before network dispatch. Tools have a name, description, and JSON Schema. Tool choice supports auto, none, required, or one named tool. Response format supports text, JSON object where available, or strict named JSON Schema.
+
+Adapters validate the canonical schema locally, then translate a separate wire schema. OpenAI strict schemas recursively require every property and represent locally optional values as nullable; returned wire-only nulls normalize back to omission before exact local validation while explicitly nullable values remain. Open or composed canonical object schemas are rejected for OpenAI strict mode rather than falsely advertised; callers can simplify them or choose a provider with explicit support. Anthropic wire schemas remove unsupported assertion keywords while the unchanged canonical schema remains authoritative after the response. Provider capability values remain explicit `supported`, `unsupported`, `conditional`, or `unknown`; translation does not promote a conditional capability. Anthropic and Gemini discovery follows bounded cursors and commits only complete snapshots.
+
+## Artifact and image boundary
+
+Only the server can resolve an artifact. The current scanner promotes only UTF-8 text and JSON, so agent artifact input is implemented through `artifact_text_read`. It checks owner, clean upload state, clean scan state, media type, byte cap, and UTF-8 before returning content with provenance. No filesystem path reaches a provider or model. Images remain gated until a scanner can promote them safely, even though provider mappings are represented and tested.
 
 ## Common behavior
 
-- Credentials are encrypted server-side and omitted from API responses.
-- Validation calls each provider's documented model-list endpoint.
-- Requests use cancellation signals, a task deadline, and normalized error categories.
-- HTTP authentication, rate-limit, not-found, and server failures receive distinct errors.
-- In-band stream errors and truncated streams fail rather than becoming successful empty answers.
-- Usage keeps input, output, estimated cost, billed cost, and currency separate.
-- Monetary budgets reserve documented cost before dispatch and settle from reported usage.
-- Operators can attach a source URL, observation time, currency, and per-million rates to a discovered model; NEXUS never invents these values.
-- Unknown price fails closed when an applicable hard monetary budget exists.
-
-## Authentication reality
-
-Provider website subscriptions are not API credentials. NEXUS accepts documented API keys and local endpoints. It does not collect provider website passwords, reuse browser cookies, reverse-engineer private endpoints, or bypass subscription restrictions.
-
-## Primary documentation
-
-- [OpenAI API](https://developers.openai.com/api/reference/overview)
-- [Anthropic API](https://platform.claude.com/docs/en/api/getting-started)
-- [Google Gemini API](https://ai.google.dev/gemini-api/docs)
-- [xAI API](https://docs.x.ai/docs/overview)
-- [DeepSeek API](https://api-docs.deepseek.com/)
-- [Mistral API](https://docs.mistral.ai/api/)
-- [Ollama OpenAI compatibility](https://docs.ollama.com/openai)
-- [OpenRouter API](https://openrouter.ai/docs/api/reference/overview)
-- [LiteLLM documentation](https://docs.litellm.ai/docs/)
-- [Vercel AI SDK](https://ai-sdk.dev/docs/introduction)
-
-Content from linked sources was rephrased for compliance with licensing restrictions.
+Credentials remain encrypted server-side. Provider errors use normalized categories. Usage and cost reservations remain separate, and each agent provider turn reserves independently. Unknown price still fails closed when an applicable hard monetary budget exists. Provider website subscriptions are not API credentials.

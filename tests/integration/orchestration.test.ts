@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getTestUser } from "@/tests/helpers";
 import { getDb } from "@/src/core/database";
 import { createConnection } from "@/src/modules/gateway/connections";
-import { createAgentRun, getRun, listAgents } from "@/src/modules/agents/service";
+import { cancelRun, createAgent, createAgentRun, getRun, listAgents } from "@/src/modules/agents/service";
 import { createProject } from "@/src/modules/workspace/service";
 import { workerTick } from "@/src/modules/agents/runtime";
 
@@ -27,7 +27,7 @@ describe("durable multi-agent orchestration", () => {
       await new Promise((resolve) => setTimeout(resolve, 10)); active.count -= 1;
       return new Response('data: {"choices":[{"delta":{"content":"verified output"}}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\ndata: [DONE]\n\n', { status: 200 });
     }));
-    const agents = listAgents(userId).slice(0, 2).map((agent) => String(agent.id));
+    const agents = listAgents(userId).filter((agent) => String(agent.slug) === "general-assistant" || String(agent.slug) === "product-strategist").slice(0, 2).map((agent) => String(agent.id));
     const runId = createAgentRun({ userId, projectId, goal: "Produce and verify a concise result", mode: "team", agentIds: agents, targets: [{ connectionId, modelId }], maxParallelism: 2 });
     await workerTick();
     let run = getRun(userId, runId)!;
@@ -46,5 +46,45 @@ describe("durable multi-agent orchestration", () => {
     expect(usage).toHaveLength(3);
     expect(usage.every((item) => item.status === "settled")).toBe(true);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("task-start resource-budget enforcement", () => {
+  it("fails a task with typed budget_exceeded before creating an attempt or provider call", async () => {
+    const db = getDb(); const policyId = randomUUID(); const now = new Date().toISOString();
+    db.prepare(`INSERT INTO resource_budget_policies (id,user_id,unit,scope_type,project_id,period,hard_limit,created_at,updated_at)
+      VALUES (?,?,'task_starts','project',?,'run',0,?,?)`).run(policyId, userId, projectId, now, now);
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    try {
+      const agentId = String(listAgents(userId).find((agent) => String(agent.slug) === "general-assistant")!.id);
+      const runId = createAgentRun({ userId, projectId, goal: "Do not start over budget", mode: "team", agentIds: [agentId], targets: [{ connectionId, modelId }] });
+      await workerTick();
+      const run = getRun(userId, runId)!;
+      expect(run.status).toBe("failed");
+      expect(run.tasks.every((task) => task.status === "failed" && task.errorCode === "budget_exceeded")).toBe(true);
+      expect(db.prepare("SELECT count(*) AS count FROM task_attempts WHERE task_id IN (SELECT id FROM tasks WHERE run_id=?)").get(runId)).toEqual({ count: 0 });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      db.prepare("DELETE FROM resource_budget_policies WHERE id=?").run(policyId);
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("stored agent resource-budget snapshots", () => {
+  it("enforces a per-run model-call cap before provider dispatch", async () => {
+    const agentId = createAgent(userId, { name: `Zero-call ${randomUUID()}`, role: "budget", instructions: "budget", budget: { perRun: { modelCalls: 0 } } });
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    const runId = createAgentRun({ userId, projectId, goal: "Agent snapshot budget", mode: "team", agentIds: [agentId], targets: [{ connectionId, modelId }] });
+    try {
+      await workerTick();
+      const root = getRun(userId, runId)!.tasks.find((task) => task.assignedAgentId === agentId)!;
+      expect(root.status).toBe("failed");
+      expect(root.errorCode).toBe("budget_exceeded");
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      cancelRun(userId, runId);
+      vi.unstubAllGlobals();
+    }
   });
 });

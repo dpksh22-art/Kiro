@@ -3,5 +3,8 @@ Object.assign(process.env, {
   BETTER_AUTH_URL: "http://localhost:3000",
   BETTER_AUTH_SECRET: "test-auth-secret-that-is-at-least-thirty-two-characters",
   NEXUS_MASTER_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+  NEXUS_BACKUP_SIGNING_KEY: "YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
   NEXUS_DATABASE_PATH: "./data/vitest.db",
+  NEXUS_ARTIFACT_ROOT: "./data/vitest-artifacts",
+  NEXUS_ARTIFACT_QUOTA_BYTES: "104857600",
 });

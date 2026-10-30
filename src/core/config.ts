@@ -6,12 +6,24 @@ const serverSchema = z.object({
   BETTER_AUTH_URL: z.url().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().min(32),
   NEXUS_DATABASE_PATH: z.string().min(1).default("./data/nexus.db"),
+  NEXUS_ARTIFACT_ROOT: z.string().min(1).default("./data/artifacts"),
+  NEXUS_ARTIFACT_QUOTA_BYTES: z.coerce.number().int().min(10 * 1024 * 1024).max(Number.MAX_SAFE_INTEGER).default(1024 * 1024 * 1024),
   NEXUS_MASTER_KEY: z.string().optional(),
+  NEXUS_BACKUP_SIGNING_KEY: z.string().optional(),
   NEXUS_BOOTSTRAP_TOKEN: z.string().min(24).optional(),
   OLLAMA_BASE_URL: z.url().default("http://127.0.0.1:11434"),
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV === "production" && value.NEXUS_DATABASE_PATH !== ":memory:" && !isAbsolute(value.NEXUS_DATABASE_PATH)) {
     ctx.addIssue({ code: "custom", path: ["NEXUS_DATABASE_PATH"], message: "Must be absolute in production so migration and standalone server resolve the same file." });
+  }
+  if (value.NODE_ENV === "production" && !isAbsolute(value.NEXUS_ARTIFACT_ROOT)) {
+    ctx.addIssue({ code: "custom", path: ["NEXUS_ARTIFACT_ROOT"], message: "Must be absolute in production so artifact storage resolves consistently." });
+  }
+  if (value.NEXUS_BACKUP_SIGNING_KEY) {
+    const decoded = Buffer.from(value.NEXUS_BACKUP_SIGNING_KEY, "base64");
+    if (decoded.length < 32) ctx.addIssue({ code: "custom", path: ["NEXUS_BACKUP_SIGNING_KEY"], message: "Must decode to at least 32 bytes." });
+  } else if (value.NODE_ENV === "production") {
+    ctx.addIssue({ code: "custom", path: ["NEXUS_BACKUP_SIGNING_KEY"], message: "Required in production for authenticated backups." });
   }
   if (value.NEXUS_MASTER_KEY) {
     let decoded: Buffer;

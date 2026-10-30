@@ -120,10 +120,11 @@
   .success { color: var(--green); }
   .status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
   .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
-  .status-connected::before, .status-succeeded::before, .status-completed::before { background: var(--green); }
+  .status-connected::before, .status-succeeded::before, .status-completed::before, .status-clean::before, .status-success::before { background: var(--green); }
   .status-running::before, .status-streaming::before { background: var(--blue); }
-  .status-failed::before, .status-invalid::before { background: var(--red); }
-  .status-waiting::before, .status-blocked::before, .status-degraded::before { background: var(--amber); }
+  .status-failed::before, .status-invalid::before, .status-failure::before { background: var(--red); }
+  .status-waiting::before, .status-blocked::before, .status-degraded::before, .status-quarantined::before, .status-denied::before { background: var(--amber); }
+  .row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
   .list { display: grid; }
   .list-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; padding: 12px 16px; border-top: 1px solid var(--border); }
   .list-row:first-child { border-top: 0; }

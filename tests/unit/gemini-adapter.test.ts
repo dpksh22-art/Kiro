@@ -35,7 +35,7 @@ describe("Gemini adapter contract", () => {
     expect(models).toEqual([{
       id: "gemini-test",
       displayName: "Gemini Test",
-      capabilities: { text: "supported", streaming: "conditional", tools: "unknown", structured_output: "unknown" },
+      capabilities: { text: "supported", streaming: "conditional", tools: "conditional", structured_output: "conditional" },
       metadata: { inputTokenLimit: 100, outputTokenLimit: 20, supportedGenerationMethods: ["generateContent"] },
     }]);
     expect(models[0]?.metadata).not.toHaveProperty("pricing");
@@ -86,5 +86,22 @@ describe("Gemini adapter contract", () => {
     expect(await iterator.next()).toEqual({ value: { type: "response.started" }, done: false });
     controller.abort();
     await expect(iterator.next()).rejects.toMatchObject({ code: "cancelled", status: 499 });
+  });
+});
+
+
+describe("Gemini bounded discovery pagination", () => {
+  it("returns a complete two-page snapshot and fails closed on a later page", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "models/one" }], nextPageToken: "next" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "models/two" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(adapter.listModels({ apiKey: "key" })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "one" }), expect.objectContaining({ id: "two" })]));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("pageToken=next");
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "models/one" }], nextPageToken: "next" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "failed" }), { status: 503 })));
+    await expect(adapter.listModels({ apiKey: "key" })).rejects.toBeInstanceOf(GatewayError);
   });
 });

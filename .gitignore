@@ -11,6 +11,7 @@ test-results/
 data/*.db
 data/*.db-*
 data/artifacts/
+data/*artifacts/
 *.log
 *.tsbuildinfo
 .DS_Store

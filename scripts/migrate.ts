@@ -2,10 +2,14 @@ import { pathToFileURL } from "node:url";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { getMigrations } from "better-auth/db/migration";
-import { auth } from "../src/core/auth";
 import { getDb, getDatabasePath } from "../src/core/database";
 
 export async function migrate() {
+  // A pristine database cannot pass runtime schema validation until this command
+  // creates the auth tables. Build a migration-only auth instance without importing
+  // the normal runtime singleton; production request startup still validates.
+  const { createNexusAuth } = await import("../src/core/auth-config");
+  const auth = createNexusAuth({ validateSchema: false });
   const authMigrations = await getMigrations(auth.options);
   await authMigrations.runMigrations();
 

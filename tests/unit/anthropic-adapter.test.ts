@@ -35,7 +35,7 @@ describe("Anthropic adapter contract", () => {
     expect(models).toEqual([{
       id: "claude-test",
       displayName: "Claude Test",
-      capabilities: { text: "supported", streaming: "supported", tools: "unknown", structured_output: "unknown" },
+      capabilities: { text: "supported", streaming: "supported", tools: "supported", structured_output: "conditional" },
       metadata: { createdAt: "2026-01-01T00:00:00Z" },
     }]);
     expect(models[0]?.metadata).not.toHaveProperty("pricing");
@@ -93,5 +93,22 @@ describe("Anthropic adapter contract", () => {
     expect(await iterator.next()).toEqual({ value: { type: "response.started", providerRequestId: undefined }, done: false });
     controller.abort();
     await expect(iterator.next()).rejects.toMatchObject({ code: "cancelled", status: 499 });
+  });
+});
+
+
+describe("Anthropic bounded discovery pagination", () => {
+  it("returns a complete two-page snapshot and rejects a repeated cursor", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "one" }], has_more: true, last_id: "cursor-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "two" }], has_more: false }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(adapter.listModels({ apiKey: "key" })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "one" }), expect.objectContaining({ id: "two" })]));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("after_id=cursor-1");
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [], has_more: true, last_id: "same" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [], has_more: true, last_id: "same" }), { status: 200 })));
+    await expect(adapter.listModels({ apiKey: "key" })).rejects.toThrow(/invalid cursor/i);
   });
 });

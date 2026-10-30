@@ -8,7 +8,7 @@ describe("OpenAI-compatible adapter", () => {
   it("normalizes model discovery without inventing pricing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "model-a", owned_by: "vendor" }] }), { status: 200 })));
     const models = await adapter.listModels({ apiKey: "key" });
-    expect(models[0]).toMatchObject({ id: "model-a", displayName: "model-a", capabilities: { tools: "unknown" } });
+    expect(models[0]).toMatchObject({ id: "model-a", displayName: "model-a", capabilities: { tools: "conditional" } });
     expect(models[0]?.metadata).not.toHaveProperty("pricing");
   });
   it("normalizes streamed deltas and usage", async () => {

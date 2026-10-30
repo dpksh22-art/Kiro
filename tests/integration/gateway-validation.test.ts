@@ -4,6 +4,7 @@ import { getDb } from "@/src/core/database";
 import { createAgentRun, listAgents } from "@/src/modules/agents/service";
 import { createConnection, validateConnection } from "@/src/modules/gateway/connections";
 import { streamChat } from "@/src/modules/workspace/chat";
+import { disconnectProvider } from "@/src/modules/lifecycle/service";
 import { createProject } from "@/src/modules/workspace/service";
 
 const modelResponse = (...ids: string[]) => new Response(JSON.stringify({ data: ids.map((id) => ({ id, name: id })) }), { status: 200 });
@@ -68,5 +69,38 @@ describe("gateway connection validation", () => {
       agentIds: [agentId],
       targets: [{ connectionId, modelId }],
     })).toThrow(/not available/i);
+  });
+});
+
+
+describe("provider validation generation fencing", () => {
+  it("does not let a stale validation restore a disconnected credential", async () => {
+    const userId = getTestUser();
+    const connectionId = createConnection(userId, { provider: "openai", label: `Fence ${crypto.randomUUID()}`, apiKey: "sk-test" });
+    let release!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    const validating = validateConnection(userId, connectionId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disconnectProvider(userId, connectionId)).toMatchObject({ disconnected: true, credentialDeleted: true });
+    release(modelResponse("stale-model"));
+    await expect(validating).rejects.toThrow(/superseded/i);
+    expect(getDb().prepare("SELECT status,encrypted_credential AS credential FROM provider_connections WHERE id=?").get(connectionId)).toEqual({ status: "disconnected", credential: null });
+    expect(getDb().prepare("SELECT count(*) AS count FROM models WHERE connection_id=? AND availability='available'").get(connectionId)).toEqual({ count: 0 });
+  });
+
+  it("lets the newest overlapping validation snapshot win", async () => {
+    const userId = getTestUser();
+    const connectionId = createConnection(userId, { provider: "openai", label: `Generation ${crypto.randomUUID()}`, apiKey: "sk-test" });
+    const resolvers: Array<(response: Response) => void> = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { resolvers.push(resolve); })));
+    const first = validateConnection(userId, connectionId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = validateConnection(userId, connectionId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolvers[1]!(modelResponse("new-model"));
+    await expect(second).resolves.toBe(1);
+    resolvers[0]!(modelResponse("old-model"));
+    await expect(first).rejects.toThrow(/superseded/i);
+    expect(getDb().prepare("SELECT provider_model_id AS id FROM models WHERE connection_id=? AND availability='available'").all(connectionId)).toEqual([{ id: "new-model" }]);
   });
 });

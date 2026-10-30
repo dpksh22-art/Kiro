@@ -6,7 +6,9 @@ const env = {
   BETTER_AUTH_URL: "http://127.0.0.1:3200",
   BETTER_AUTH_SECRET: "production-smoke-secret-at-least-thirty-two-characters",
   NEXUS_MASTER_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+  NEXUS_BACKUP_SIGNING_KEY: "YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
   NEXUS_DATABASE_PATH: `${process.cwd()}/data/production-smoke.db`,
+  NEXUS_ARTIFACT_ROOT: `${process.cwd()}/data/production-smoke-artifacts`,
   NEXUS_BOOTSTRAP_TOKEN: "production-smoke-bootstrap-token",
 };
 
