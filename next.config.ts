@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; connect-src 'self' https:; ${scriptPolicy}; style-src 'self' 'unsafe-inline'; font-src 'self'; upgrade-insecure-requests` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; connect-src 'self' https:; ${scriptPolicy}; style-src 'self' 'unsafe-inline'; font-src 'self'${process.env.NEXUS_ALLOW_HTTP === "1" ? "" : "; upgrade-insecure-requests"}` },
         ],
       },
     ];

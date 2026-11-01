@@ -11,7 +11,7 @@ export const auth = betterAuth({
   baseURL: config.BETTER_AUTH_URL,
   secret: config.BETTER_AUTH_SECRET,
   database: getDb(),
-  trustedOrigins: [config.BETTER_AUTH_URL],
+  trustedOrigins: [config.BETTER_AUTH_URL, ...(process.env.NEXUS_TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean)],
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 12,
@@ -37,7 +37,7 @@ export const auth = betterAuth({
       joins: true,
       validateSchema: config.NODE_ENV !== "test" && process.env.NEXT_PHASE !== "phase-production-build",
     },
-    useSecureCookies: config.NODE_ENV === "production",
+    useSecureCookies: config.NODE_ENV === "production" && config.BETTER_AUTH_URL.startsWith("https:"),
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

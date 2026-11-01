@@ -4,6 +4,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG NEXUS_ALLOW_HTTP=0
+ENV NEXUS_ALLOW_HTTP=$NEXUS_ALLOW_HTTP
 RUN BETTER_AUTH_URL=http://localhost:3000 \
     BETTER_AUTH_SECRET=build-only-secret-that-is-never-used-at-runtime \
     NEXUS_MASTER_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
