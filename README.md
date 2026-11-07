@@ -66,6 +66,17 @@ Open **Agent Teams**, select agents and models, enter a goal, and start a run. I
 
 Open **Research Lab** and use a public webpage, RSS/Atom URL, Hacker News item ID, or `owner/repository`. Tavily search appears in the UI but returns a configuration error until `TAVILY_API_KEY` is set. Reddit and X are intentionally unavailable without approved API access.
 
+### Optional deployment variables
+
+These are read by the code but are not in `.env.example`:
+
+| Variable | Effect |
+|---|---|
+| `NEXUS_TRUSTED_ORIGINS` | Comma-separated extra origins accepted by authentication, in addition to `BETTER_AUTH_URL` (`src/core/auth.ts`). |
+| `NEXUS_ALLOW_HTTP` | Set to `1` to omit `upgrade-insecure-requests` from the Content-Security-Policy, for plain-HTTP LAN deployments (`next.config.ts`). The Dockerfile accepts it as a build argument, default `0`. |
+
+In production, `NEXUS_DATABASE_PATH` must be an absolute path; relative paths are rejected (`src/core/config.ts`).
+
 ## Commands
 
 | Command | Purpose |
