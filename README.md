@@ -110,4 +110,4 @@ See [Architecture](docs/ARCHITECTURE.md), [Providers](docs/PROVIDERS.md), [Agent
 
 ## License
 
-No project license has been selected. All third-party dependencies retain their own licenses. Do not redistribute this repository as open source until an explicit license is added.
+NEXUS is released under the [MIT License](LICENSE). Third-party dependencies retain their own licenses.
